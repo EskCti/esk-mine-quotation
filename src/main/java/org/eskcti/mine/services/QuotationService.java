@@ -1,5 +1,7 @@
 package org.eskcti.mine.services;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -11,9 +13,9 @@ import org.eskcti.mine.messages.KafkaEvents;
 import org.eskcti.mine.repositories.QuotationRepository;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Date;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @ApplicationScoped
 public class QuotationService {
@@ -28,9 +30,14 @@ public class QuotationService {
     @Inject
     KafkaEvents kafkaEvents;
 
-    public void getCurrencyPrice() {
-        CurrencyPriceDTO currencyPriceInfo = currencyPriceClient.getPriceByPair("USD-BRL");
-
+    public void getCurrencyPrice() throws JsonProcessingException {
+        String json = currencyPriceClient.getPriceByPair("USD-BRL");
+        ObjectMapper objectMapper = new ObjectMapper();
+        CurrencyPriceDTO currencyPriceInfo = objectMapper.readValue(json, CurrencyPriceDTO.class);
+        if (currencyPriceInfo == null) {
+            System.out.println("Moeda nula!");
+            return;
+        }
         if (updateCurrentInfoPrice(currencyPriceInfo)) {
             kafkaEvents.sendNewKafkaEvent(
                     QuotationDTO
@@ -43,6 +50,10 @@ public class QuotationService {
     }
 
     private boolean updateCurrentInfoPrice(CurrencyPriceDTO currencyPriceInfo) {
+        if (currencyPriceInfo.getUSDBRL() == null) {
+            System.out.println("Pair nula!");
+            return false;
+        }
         BigDecimal currentPrice = new BigDecimal(currencyPriceInfo.getUSDBRL().getBid());
         boolean updatePrice = false;
 
@@ -54,8 +65,11 @@ public class QuotationService {
         } else {
             QuotationEntity lastDollarPrice = quotationList
                     .get(quotationList.size() - 1);
-            
-            if (currentPrice.floatValue() > lastDollarPrice.getCurrencyPrice().floatValue()) {
+
+            BigDecimal currentPriceRounded = currentPrice.setScale(2, RoundingMode.HALF_UP);
+            BigDecimal lastDollarPriceRounded = lastDollarPrice.getCurrencyPrice().setScale(2, RoundingMode.HALF_UP);
+
+            if (currentPriceRounded.compareTo(lastDollarPriceRounded) > 0) {
                 updatePrice = true;
                 saveQuotation(currencyPriceInfo);
             }
