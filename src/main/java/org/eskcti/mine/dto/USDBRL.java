@@ -1,14 +1,12 @@
 package org.eskcti.mine.dto;
 
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.extern.jackson.Jacksonized;
+import lombok.NoArgsConstructor;
 
-@Jacksonized
 @Data
-@Builder
 @AllArgsConstructor
+@NoArgsConstructor
 public class USDBRL {
     public String code;
     public String codein;
